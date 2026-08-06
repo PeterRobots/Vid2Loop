@@ -60,19 +60,19 @@ For example a slow mo style clip with varying pacing and interpolation.
 https://ayosec.github.io/ffmpeg-filters-docs/8.0/Filters/Multimedia/setpts.html
 Change the frame pacing of a video, higher is slower.
 ### Variables
-`PTS = 1/($FPS*TB)`
-`N`: The sequential index number of the input frame (starting at `0`).
-`TB`: The timebase of the input stream.
-`PI`: Mathematical constant π inside expression evaluations.
-`T`: Presentation time of the frame in seconds
+- `PTS = 1/($FPS*TB)`
+- `N`: The sequential index number of the input frame (starting at `0`).
+- `TB`: The timebase of the input stream.
+- `PI`: Mathematical constant π inside expression evaluations.
+- `T`: Presentation time of the frame in seconds
 ## minterpolate
 https://ayosec.github.io/ffmpeg-filters-docs/8.0/Filters/Video/minterpolate.html
 minterpolate makes new frames for desired framerate
 ### Variables
-`mi_mode=mci:mc_mode=aobmc`: uses slow adv vector motion handling
-`mi_mode=blend`: is fast and simple blending
-`me_mode`: is the motion estimation, bilat is default, bidir is smoother
-`vsbmc=1`: sets variable block sizes
+- `mi_mode=mci:mc_mode=aobmc`: uses slow adv vector motion handling
+- `mi_mode=blend`: is fast and simple blending
+- `me_mode`: is the motion estimation, bilat is default, bidir is smoother
+- `vsbmc=1`: sets variable block sizes
 As a comment, `minterpolate` is ok:
 - blend is very fast and introduces ghosting artifacts
 - mci is far clearer but introduces blocking artifacts

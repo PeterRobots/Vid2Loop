@@ -14,6 +14,7 @@ INTERP_FPS=1.0
 INTERP="none"
 DURATION_BOOL=false
 TYPE="mp4"
+
 # ARG INPUT
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -90,14 +91,12 @@ if [[ ! -z "$START" ]]; then
   SS="-ss $START"
   DURATION_BOOL=true
   echo $START
-  # FFTRIM="trim=start=$START"
 fi
 
 if [[ ! -z "$END" ]]; then
   TO="-to $END"
   DURATION_BOOL=true
   echo $END
-  # FFTRIM="$(FFTRIM):end=$END"
 fi
 
 if [[ -z "$DURATION" ]]; then
@@ -108,19 +107,9 @@ if [[ -z "$DURATION" ]]; then
   fi
 fi
 
-# SETPTS
-  # Variables
-  # PTS = 1/($FPS*TB)
-  # N: The sequential index number of the input frame (starting at 0).
-  # TB: The timebase of the input stream.
-  # PI: Mathematical constant π inside expression evaluations.
-  # T: Presentation time of the frame in seconds
 if [[ ! -z "$RATE" ]]; then
   echo "Rate = $RATE"
   INVERTED_RATE=$((1.0 / RATE))
-  # SETPTS_RATE="(N + $RATE * sin(N*2*PI/$FPS))"
-  # Variable speed change peaking in the middle
-  # SETPTS_RATE="(PTS-STARTPTS + $INVERTED_RATE * sin(PI*(T-$START)/$DURATION))"
   case "$MODE" in
     sin)
     SETPTS_RATE="(1.0 + ($INVERTED_RATE - 1.0) * sin(0.5*PI*T/$DURATION))"
@@ -143,18 +132,10 @@ if [[ ! -z "$RATE" ]]; then
     ;;
   esac
   echo $SETPTS_RATE
-  # INTERP_FPS="(1/((N + $RATE * sin(N*2*PI/$FPS)) * TB))"
   INTERP_FPS=$((INVERTED_RATE * FPS))
   echo $INTERP_FPS
 fi
 
-# MINTERPOLATE
-# https://ayosec.github.io/ffmpeg-filters-docs/8.0/Filters/Video/minterpolate.html
-# minterpolate makes new frames for desired framerate
-# mi_mode=mci:mc_mode=aobmc uses slow adv vector motion handling
-# mi_mode=blend is fast and simple blending
-# me_mode is the motion estimation, bilat is default, bidir is smoother
-# vsbmc=1 sets variable block sizes
 case "$INTERP" in
   "mci")
   MINTERPOLATE="minterpolate=fps=$FPS:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1"
@@ -182,61 +163,11 @@ fi
 
 echo "SETPTS= $SETPTS"
 echo "MINTERPOLATE= $MINTERPOLATE"
-echo "arr= $arr"
-# for s in "${arr[@]}"; do
-#   [[ -n "$s" ]] && filtered+=($S)
-# done
 FILTER=$(IFS=","; echo ""${arr:#}"")
 if [[ ! -z "$FILTER" ]]; then
   FILTER=(-filter:v $FILTER)
 fi
 echo "FILTERS= $FILTER"
-# SYSTEM FLAGS
-
-# case "$OSTYPE" in
-#   solaris*)
-#   echo "Solaris"
-#   SYSTEM_FLAGS=""
-#   ;;
-#   darwin*)
-#   echo "macOS"
-#   SYSTEM_FLAGS=""
-#   ;;
-#   linux*)
-#   echo "Linux"
-#   SYSTEM_FLAGS="libvmaf=model='$VMAF'"
-#   ;;
-#   bsd*)
-#   echo "BSD"
-#   SYSTEM_FLAGS=""
-#   ;;
-#   msys*)
-#   echo "Windows (Git Bash)"
-#   SYSTEM_FLAGS=""
-#   ;;
-#   cygwin*)
-#   echo "Windows (Cygwin)"
-#   SYSTEM_FLAGS=""
-#   ;;
-#   *)
-#   echo "Unknown: $OSTYPE"
-#   ;;
-# esac
-
-# VMAF - IGNORE #
-# Bazzite ffmpeg doesn't have vmaf, so I had to download and put inside: .local/share/ffmpeg/model/vmaf_v0.6.1.json
-# I'm not entirely sure why this isn't simpler, but I have to input the starting file again after encoding.
-# Feed it into complex filter for vmaf.
-# if [[ ! -z $VMAF ]]; then
-#   SYSTEM_FLAGS=(-i "$INPUT" -filter_complex "[1:v][0:v]libvmaf=model='path=$VMAF'" -f null -)
-# fi
-
-# ENCODERS #
-# libaom-av1 is reference
-# libsvtav1 is open source netflix SVT-AV1
-# librav1e is a rust open source implementation
-# For Apple M1 CPU encode
-# libsvtav1 > librav1e > libaom-av1
 
 case "$TYPE" in
   "avif")

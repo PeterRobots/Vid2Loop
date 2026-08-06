@@ -1,4 +1,4 @@
-#FFMPEG video loop maker
+# FFMPEG video loop maker
 Want to make short loops from videos with FOSS command line tools?
 You've come to the right place!
 # Installing

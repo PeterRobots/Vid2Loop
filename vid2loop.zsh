@@ -67,7 +67,7 @@ while [[ $# -gt 0 ]]; do
       echo "  -r, --rate      Set framepacing rate (slowdown <1, speedup >1) (default: 1.0)"
       echo "  -m, --mode      Set framepacing mode: const, sin, cos, none (default: none)"
       echo "  --interp     Set interp method: mci, blend, none (default: none)"
-      echo "  -t, --output-type      Set output type: avif, gif, mp4 (default: mp4)"
+      echo "  -t, --output-type      Set output type: avif, gif, mp4, webp (default: mp4)"
       echo "  --vmaf      Set vmaf.json path if not present in /usr/bin (default: none)"
       exit 0
       ;;

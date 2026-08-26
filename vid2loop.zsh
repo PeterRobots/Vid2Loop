@@ -261,8 +261,7 @@ case "$TYPE" in
     -c:v libsvtav1 -crf 20 -preset 4 -svtav1-params tune=0 \
     -pix_fmt yuv420p10le \
     -loop 0 \
-    "$OUTPUT" | grep -v 'problem loading model file: /usr/local/share/model/vmaf_v0.6.1.json
-libvmaf ERROR could not read model from path: "/usr/local/share/model/vmaf_v0.6.1.json"'
+    "$OUTPUT" | grep -v 'problem loading model file: /usr/local/share/model/vmaf_v0.6.1.json'
   ;;
   "gif")
   ffmpeg $LOG  $CLIP -i "$INPUT" \
@@ -281,15 +280,13 @@ libvmaf ERROR could not read model from path: "/usr/local/share/model/vmaf_v0.6.
       $FILTER \
       -c:v libx265 -tag:v hvc1 -crf 18 -preset medium $SYSTEM_FLAGS \
       -pix_fmt yuv420p10le \
-      "$OUTPUT" | grep -v 'problem loading model file: /usr/local/share/model/vmaf_v0.6.1.json
-libvmaf ERROR could not read model from path: "/usr/local/share/model/vmaf_v0.6.1.json"'
+      "$OUTPUT" | grep -v 'problem loading model file: /usr/local/share/model/vmaf_v0.6.1.json'
   ;;
   "keep")
     ffmpeg $LOG $CLIP -i "$INPUT" \
       $FILTER \
       -c copy $SYSTEM_FLAGS \
-      "$OUTPUT" | grep -v 'problem loading model file: /usr/local/share/model/vmaf_v0.6.1.json
-libvmaf ERROR could not read model from path: "/usr/local/share/model/vmaf_v0.6.1.json"'
+      "$OUTPUT" | grep -v 'problem loading model file: /usr/local/share/model/vmaf_v0.6.1.json'
   ;;
   *)
   echo "Unknown output type: $TYPE"

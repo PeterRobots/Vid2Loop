@@ -14,13 +14,14 @@ INTERP_FPS=1.0
 INTERP="none"
 DURATION_BOOL=false
 TYPE="mp4"
+LOG="fatal"
 
 # ARG INPUT
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -i)
       INPUT="$2"
-      shift 2 # Past argument only (flag)
+      shift 2
       ;;
     -o)
       OUTPUT="$2"
@@ -58,6 +59,10 @@ while [[ $# -gt 0 ]]; do
       VMAF="$2"
       shift 2
       ;;
+    -v|--log-level)
+      LOG="$2"
+      shift 2
+      ;;
     --help)
       echo "Usage: $0 [options]"
       echo "  -i   Set input"
@@ -70,6 +75,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --interp     Set interp method: mci, blend, none (default: none)"
       echo "  -t, --output-type      Set output type: avif, gif, mp4, webp (default: mp4)"
       echo "  --vmaf      Set vmaf.json path if not present in /usr/bin (default: none)"
+      echo "  -v, --log-level      set the log level: quiet, panic, fatal, error, warning, info, verbose, debug, trace  (default: fatal)"
       exit 0
       ;;
     *)
@@ -78,6 +84,7 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
 echo "input = $INPUT"
 echo "output = $OUTPUT"
 
@@ -86,42 +93,61 @@ FPS=$(ffprobe -v error -select_streams v -of default=noprint_wrappers=1:nokey=1 
 FPS=$((FPS))
 INTERP_FPS=$FPS
 echo "fps = $FPS"
+## LOG
+LOG=(-v $LOG)
+echo $LOG
 
+## CLIP
+CLIP=()
 if [[ ! -z "$START" ]]; then
-  SS="-ss $START"
+  CLIP+=(-ss $START)
   DURATION_BOOL=true
-  echo $START
+  echo "START = $START"
 fi
 
 if [[ ! -z "$END" ]]; then
-  TO="-to $END"
+  CLIP+=(-to $END)
   DURATION_BOOL=true
-  echo $END
+  echo "END = $END"
 fi
 
+## DURATION
 if [[ -z "$DURATION" ]]; then
-  if [[ $DURATION_BOOL ]]; then
+  if $DURATION_BOOL; then
     DURATION=$((END-START))
   else
+    echo "Getting duration from ffprobe..."
     DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$INPUT")
   fi
 fi
-
+echo "DURATION = $DURATION"
+# SETPTS
+  # Variables
+  # PTS = 1/($FPS*TB)
+  # N: The sequential index number of the input frame (starting at 0).
+  # TB: The timebase of the input stream.
+  # PI: Mathematical constant π inside expression evaluations.
+  # T: Presentation time of the frame in seconds
 if [[ ! -z "$RATE" ]]; then
   echo "Rate = $RATE"
-  INVERTED_RATE=$((1.0 / RATE))
+  INVERTED_RATE=$(( 1.0 / RATE ))
+  if [[ ! -z $SS ]]; then
+    PTS="(PTS-STARTPTS)"
+  else
+    PTS="PTS"
+  fi
   case "$MODE" in
-    sin)
+    sin) # Variable speed slowest in the middle
     SETPTS_RATE="(1.0 + ($INVERTED_RATE - 1.0) * sin(0.5*PI*T/$DURATION))"
-    SETPTS="setpts='(PTS-STARTPTS)*$SETPTS_RATE'"
+    SETPTS="setpts='$PTS*$SETPTS_RATE'"
     ;;
     const)
     SETPTS_RATE="$INVERTED_RATE"
-    SETPTS="setpts='(PTS-STARTPTS)*$SETPTS_RATE'"
+    SETPTS="setpts='$PTS*$SETPTS_RATE'"
     ;;
-    cos)
+    cos) # Variable speed slowest at the start
     SETPTS_RATE="(1.0 + ($INVERTED_RATE - 1.0) * cos(0.5*PI*T/$DURATION))"
-    SETPTS="setpts='(PTS-STARTPTS)*$SETPTS_RATE'"
+    SETPTS="setpts='$PTS*$SETPTS_RATE'"
     ;;
     none)
     SETPTS=""
@@ -131,11 +157,19 @@ if [[ ! -z "$RATE" ]]; then
     exit 2
     ;;
   esac
-  echo $SETPTS_RATE
+  echo "setpts rate = $SETPTS_RATE"
+  # INTERP_FPS="(1/((N + $RATE * sin(N*2*PI/$FPS)) * TB))"
   INTERP_FPS=$((INVERTED_RATE * FPS))
-  echo $INTERP_FPS
+  echo "interp fps = $INTERP_FPS"
 fi
 
+# MINTERPOLATE
+# https://ayosec.github.io/ffmpeg-filters-docs/8.0/Filters/Video/minterpolate.html
+# minterpolate makes new frames for desired framerate
+# mi_mode=mci:mc_mode=aobmc uses slow adv vector motion handling
+# mi_mode=blend is fast and simple blending
+# me_mode is the motion estimation, bilat is default, bidir is smoother
+# vsbmc=1 sets variable block sizes
 case "$INTERP" in
   "mci")
   MINTERPOLATE="minterpolate=fps=$FPS:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1"
@@ -161,41 +195,101 @@ else
   arr=("$SETPTS" "$MINTERPOLATE")
 fi
 
-echo "SETPTS= $SETPTS"
-echo "MINTERPOLATE= $MINTERPOLATE"
-FILTER=$(IFS=","; echo ""${arr:#}"")
+echo "SETPTS = $SETPTS"
+echo "MINTERPOLATE = $MINTERPOLATE"
+echo "arr = $arr"
+# for s in "${arr[@]}"; do
+#   [[ -n "$s" ]] && filtered+=($S)
+# done
+FILTER="${(j[,])arr:#}"
+echo "FILTERS = $FILTER"
 if [[ ! -z "$FILTER" ]]; then
   FILTER=(-filter:v $FILTER)
 fi
-echo "FILTERS= $FILTER"
+echo "FILTERS = $FILTER"
+# SYSTEM FLAGS
+
+# case "$OSTYPE" in
+#   solaris*)
+#   echo "Solaris"
+#   SYSTEM_FLAGS=""
+#   ;;
+#   darwin*)
+#   echo "macOS"
+#   SYSTEM_FLAGS=""
+#   ;;
+#   linux*)
+#   echo "Linux"
+#   SYSTEM_FLAGS="libvmaf=model='$VMAF'"
+#   ;;
+#   bsd*)
+#   echo "BSD"
+#   SYSTEM_FLAGS=""
+#   ;;
+#   msys*)
+#   echo "Windows (Git Bash)"
+#   SYSTEM_FLAGS=""
+#   ;;
+#   cygwin*)
+#   echo "Windows (Cygwin)"
+#   SYSTEM_FLAGS=""
+#   ;;
+#   *)
+#   echo "Unknown: $OSTYPE"
+#   ;;
+# esac
+
+# VMAF - IGNORE #
+# Bazzite ffmpeg doesn't have vmaf, so I had to download and put inside: .local/share/ffmpeg/model/vmaf_v0.6.1.json
+# I'm not entirely sure why this isn't simpler, but I have to input the starting file again after encoding.
+# Feed it into complex filter for vmaf.
+# if [[ ! -z $VMAF ]]; then
+#   SYSTEM_FLAGS=(-i "$INPUT" -filter_complex "[1:v][0:v]libvmaf=model='path=$VMAF'" -f null -)
+# fi
+
+# ENCODERS #
+# libaom-av1 is reference
+# libsvtav1 is open source netflix SVT-AV1
+# librav1e is a rust open source implementation
+# For Apple M1 CPU encode
+# libsvtav1 > librav1e > libaom-av1
 
 case "$TYPE" in
   "avif")
-  ffmpeg $=SS $=TO -i "$INPUT" \
-    $FILTER \
+  ffmpeg $LOG  $CLIP -i "$INPUT" \
+    $=FILTER \
     -c:v libsvtav1 -crf 20 -preset 4 -svtav1-params tune=0 \
     -pix_fmt yuv420p10le \
     -loop 0 \
-    "$OUTPUT"
+    "$OUTPUT" | grep -v 'problem loading model file: /usr/local/share/model/vmaf_v0.6.1.json
+libvmaf ERROR could not read model from path: "/usr/local/share/model/vmaf_v0.6.1.json"'
   ;;
   "gif")
-  ffmpeg $=SS $=TO -i "$INPUT" \
+  ffmpeg $LOG  $CLIP -i "$INPUT" \
     $FILTER \
     -loop 0 \
     "$OUTPUT"
   ;;
   "webp")
-  ffmpeg $=SS $=TO -i "$INPUT" \
+  ffmpeg $LOG  $CLIP -i "$INPUT" \
     $FILTER \
     -loop 0 \
     "$OUTPUT"
   ;;
   "mp4")
-  ffmpeg $=SS $=TO -i "$INPUT" \
-    $FILTER \
-    -c:v libx265 -tag:v hvc1 -crf 20 -preset medium $SYSTEM_FLAGS \
-    -pix_fmt yuv420p10le \
-    "$OUTPUT"
+    ffmpeg $LOG  $CLIP -i "$INPUT" \
+      $FILTER \
+      -c:v libx265 -tag:v hvc1 -crf 18 -preset medium $SYSTEM_FLAGS \
+      -pix_fmt yuv420p10le \
+      "$OUTPUT" | grep -v 'problem loading model file: /usr/local/share/model/vmaf_v0.6.1.json
+libvmaf ERROR could not read model from path: "/usr/local/share/model/vmaf_v0.6.1.json"'
+  ;;
+  "keep")
+    ffmpeg $LOG $CLIP -i "$INPUT" \
+      $FILTER \
+      -c copy $SYSTEM_FLAGS \
+      "$OUTPUT" | grep -v 'problem loading model file: /usr/local/share/model/vmaf_v0.6.1.json
+libvmaf ERROR could not read model from path: "/usr/local/share/model/vmaf_v0.6.1.json"'
   ;;
   *)
   echo "Unknown output type: $TYPE"

@@ -13,8 +13,9 @@ SETPTS_RATE=1.0
 INTERP_FPS=1.0
 INTERP="none"
 DURATION_BOOL=false
-TYPE="mp4"
+TYPE="keep"
 LOG="fatal"
+FORCE=false
 
 # ARG INPUT
 while [[ $# -gt 0 ]]; do
@@ -63,6 +64,10 @@ while [[ $# -gt 0 ]]; do
       LOG="$2"
       shift 2
       ;;
+    -f|--force)
+      FORCE=true
+      shift 1
+      ;;
     --help)
       echo "Usage: $0 [options]"
       echo "  -i   Set input"
@@ -73,7 +78,7 @@ while [[ $# -gt 0 ]]; do
       echo "  -r, --rate      Set framepacing rate (slowdown <1, speedup >1) (default: 1.0)"
       echo "  -m, --mode      Set framepacing mode: const, sin, cos, none (default: none)"
       echo "  --interp     Set interp method: mci, blend, none (default: none)"
-      echo "  -t, --output-type      Set output type: avif, gif, mp4, webp (default: mp4)"
+      echo "  -t, --output-type      Set output type: avif, gif, mp4, webp (default: keep)"
       echo "  --vmaf      Set vmaf.json path if not present in /usr/bin (default: none)"
       echo "  -v, --log-level      set the log level: quiet, panic, fatal, error, warning, info, verbose, debug, trace  (default: fatal)"
       exit 0
@@ -86,15 +91,23 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "input = $INPUT"
+
+if [[ -z "$OUTPUT" ]]; then
+  F_BASE=$(basename $INPUT)
+  F_NAME="${F_BASE%.*}"
+  F_CONTAINER="${F_BASE:e}"
+  F_DIR="${INPUT:h}"
+  OUTPUT="$F_DIR/${F_NAME}_CLIP.$F_CONTAINER"
+fi
+
 echo "output = $OUTPUT"
 
 
 FPS=$(ffprobe -v error -select_streams v -of default=noprint_wrappers=1:nokey=1 -show_entries stream=r_frame_rate "$INPUT")
 FPS=$((FPS))
 INTERP_FPS=$FPS
-echo "fps = $FPS"
 ## LOG
-LOG=(-v $LOG)
+LOG=(-hide_banner -y -loglevel "$LOG" -stats)
 echo $LOG
 
 ## CLIP
@@ -102,13 +115,11 @@ CLIP=()
 if [[ ! -z "$START" ]]; then
   CLIP+=(-ss $START)
   DURATION_BOOL=true
-  echo "START = $START"
 fi
 
 if [[ ! -z "$END" ]]; then
   CLIP+=(-to $END)
   DURATION_BOOL=true
-  echo "END = $END"
 fi
 
 ## DURATION
@@ -119,8 +130,11 @@ if [[ -z "$DURATION" ]]; then
     echo "Getting duration from ffprobe..."
     DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$INPUT")
   fi
+else
+  START=0
+  END=$((START+DURATION))
+  CLIP+=(-ss $START -to $END)
 fi
-echo "DURATION = $DURATION"
 # SETPTS
   # Variables
   # PTS = 1/($FPS*TB)
@@ -129,7 +143,6 @@ echo "DURATION = $DURATION"
   # PI: Mathematical constant π inside expression evaluations.
   # T: Presentation time of the frame in seconds
 if [[ ! -z "$RATE" ]]; then
-  echo "Rate = $RATE"
   INVERTED_RATE=$(( 1.0 / RATE ))
   if [[ ! -z $SS ]]; then
     PTS="(PTS-STARTPTS)"
@@ -157,10 +170,8 @@ if [[ ! -z "$RATE" ]]; then
     exit 2
     ;;
   esac
-  echo "setpts rate = $SETPTS_RATE"
-  # INTERP_FPS="(1/((N + $RATE * sin(N*2*PI/$FPS)) * TB))"
+
   INTERP_FPS=$((INVERTED_RATE * FPS))
-  echo "interp fps = $INTERP_FPS"
 fi
 
 # MINTERPOLATE
@@ -188,25 +199,15 @@ esac
 
 # FILTER
 if [[ $TYPE == "gif" ]]; then
-  arr=("$SETPTS" "$MINTERPOLATE" "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse")
-elif [[ $TYPE == "mp4" ]]; then
-  arr=("$SETPTS" "$MINTERPOLATE")
+  arr=($SETPTS $MINTERPOLATE "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse")
 else
-  arr=("$SETPTS" "$MINTERPOLATE")
+  arr=($SETPTS $MINTERPOLATE)
 fi
 
-echo "SETPTS = $SETPTS"
-echo "MINTERPOLATE = $MINTERPOLATE"
-echo "arr = $arr"
-# for s in "${arr[@]}"; do
-#   [[ -n "$s" ]] && filtered+=($S)
-# done
 FILTER="${(j[,])arr:#}"
-echo "FILTERS = $FILTER"
 if [[ ! -z "$FILTER" ]]; then
   FILTER=(-filter:v $FILTER)
 fi
-echo "FILTERS = $FILTER"
 # SYSTEM FLAGS
 
 # case "$OSTYPE" in
@@ -256,40 +257,43 @@ echo "FILTERS = $FILTER"
 
 case "$TYPE" in
   "avif")
-  ffmpeg $LOG  $CLIP -i "$INPUT" \
-    $=FILTER \
-    -c:v libsvtav1 -crf 20 -preset 4 -svtav1-params tune=0 \
-    -pix_fmt yuv420p10le \
-    -loop 0 \
-    "$OUTPUT" | grep -v 'problem loading model file: /usr/local/share/model/vmaf_v0.6.1.json'
+    ENCODE=(-c:v libsvtav1 -crf 20 -preset 4 -svtav1-params tune=0)
+    LOOP=(-loop 0)
   ;;
   "gif")
-  ffmpeg $LOG  $CLIP -i "$INPUT" \
-    $FILTER \
-    -loop 0 \
-    "$OUTPUT"
+    ENCODE=()
+    LOOP=(-loop 0)
   ;;
   "webp")
-  ffmpeg $LOG  $CLIP -i "$INPUT" \
-    $FILTER \
-    -loop 0 \
-    "$OUTPUT"
+    ENCODE=()
+    LOOP=(-loop 0)
   ;;
   "mp4")
-    ffmpeg $LOG  $CLIP -i "$INPUT" \
-      $FILTER \
-      -c:v libx265 -tag:v hvc1 -crf 18 -preset medium $SYSTEM_FLAGS \
-      -pix_fmt yuv420p10le \
-      "$OUTPUT" | grep -v 'problem loading model file: /usr/local/share/model/vmaf_v0.6.1.json'
+    ENCODE=(-c:v libx265 -tag:v hvc1 -crf 18 -preset medium)
+    LOOP=()
   ;;
   "keep")
-    ffmpeg $LOG $CLIP -i "$INPUT" \
-      $FILTER \
-      -c copy $SYSTEM_FLAGS \
-      "$OUTPUT" | grep -v 'problem loading model file: /usr/local/share/model/vmaf_v0.6.1.json'
+    ENCODE=(-c copy)
+    LOOP=()
   ;;
   *)
   echo "Unknown output type: $TYPE"
   exit 4
   ;;
 esac
+
+if [[ ! -e $OUTPUT ]] || $FORCE; then
+  FFMPEG_ARGS=(${LOG})
+  FFMPEG_ARGS+=(${CLIP})
+  FFMPEG_ARGS+=(-i "$INPUT")
+  FFMPEG_ARGS+=(${FILTER})
+  FFMPEG_ARGS+=(${ENCODE})
+  FFMPEG_ARGS+=(${LOOP})
+  FFMPEG_ARGS+=("$OUTPUT")
+
+  echo "ffmpeg "$FFMPEG_ARGS
+
+  ffmpeg $FFMPEG_ARGS | grep -v 'vmaf'
+else
+  echo "Output: $OUTPUT already exists and force = false"
+fi

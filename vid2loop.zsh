@@ -81,6 +81,7 @@ while [[ $# -gt 0 ]]; do
       echo "  -c, --container      Set output container type: avif, gif, mp4, webp (default: keep)"
       echo "  --vmaf      Set vmaf.json path if not present in /usr/bin (default: none)"
       echo "  -v, --log-level      set the log level: quiet, panic, fatal, error, warning, info, verbose, debug, trace  (default: fatal)"
+      echo "  -f, --force      Force flag for ignoring output presence (default: false)"
       exit 0
       ;;
     *)

@@ -52,7 +52,7 @@ while [[ $# -gt 0 ]]; do
       INTERP="$2"
       shift 2
       ;;
-    -t|--output-type)
+    -c|--container)
       TYPE="$2"
       shift 2
       ;;
@@ -78,7 +78,7 @@ while [[ $# -gt 0 ]]; do
       echo "  -r, --rate      Set framepacing rate (slowdown <1, speedup >1) (default: 1.0)"
       echo "  -m, --mode      Set framepacing mode: const, sin, cos, none (default: none)"
       echo "  --interp     Set interp method: mci, blend, none (default: none)"
-      echo "  -t, --output-type      Set output type: avif, gif, mp4, webp (default: keep)"
+      echo "  -c, --container      Set output container type: avif, gif, mp4, webp (default: keep)"
       echo "  --vmaf      Set vmaf.json path if not present in /usr/bin (default: none)"
       echo "  -v, --log-level      set the log level: quiet, panic, fatal, error, warning, info, verbose, debug, trace  (default: fatal)"
       exit 0
@@ -208,45 +208,6 @@ FILTER="${(j[,])arr:#}"
 if [[ ! -z "$FILTER" ]]; then
   FILTER=(-filter:v $FILTER)
 fi
-# SYSTEM FLAGS
-
-# case "$OSTYPE" in
-#   solaris*)
-#   echo "Solaris"
-#   SYSTEM_FLAGS=""
-#   ;;
-#   darwin*)
-#   echo "macOS"
-#   SYSTEM_FLAGS=""
-#   ;;
-#   linux*)
-#   echo "Linux"
-#   SYSTEM_FLAGS="libvmaf=model='$VMAF'"
-#   ;;
-#   bsd*)
-#   echo "BSD"
-#   SYSTEM_FLAGS=""
-#   ;;
-#   msys*)
-#   echo "Windows (Git Bash)"
-#   SYSTEM_FLAGS=""
-#   ;;
-#   cygwin*)
-#   echo "Windows (Cygwin)"
-#   SYSTEM_FLAGS=""
-#   ;;
-#   *)
-#   echo "Unknown: $OSTYPE"
-#   ;;
-# esac
-
-# VMAF - IGNORE #
-# Bazzite ffmpeg doesn't have vmaf, so I had to download and put inside: .local/share/ffmpeg/model/vmaf_v0.6.1.json
-# I'm not entirely sure why this isn't simpler, but I have to input the starting file again after encoding.
-# Feed it into complex filter for vmaf.
-# if [[ ! -z $VMAF ]]; then
-#   SYSTEM_FLAGS=(-i "$INPUT" -filter_complex "[1:v][0:v]libvmaf=model='path=$VMAF'" -f null -)
-# fi
 
 # ENCODERS #
 # libaom-av1 is reference

@@ -230,7 +230,7 @@ case "$TYPE" in
     LOOP=(-loop 0)
   ;;
   "mp4")
-    ENCODE=(-c:v libx265 -tag:v hvc1 -crf 18 -preset medium)
+    ENCODE=(-c:v libx264 -crf 18 -preset high)
     LOOP=()
   ;;
   "keep")
